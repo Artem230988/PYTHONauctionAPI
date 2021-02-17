@@ -1,0 +1,43 @@
+version: '3.7'
+
+services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+    - postgres_volume:/var/lib/postgresql/data
+  auctionAPI:
+    image: auctionapi_image
+    container_name: auctionapi_container
+    build: .
+    command: bash -c "while !</dev/tcp/db/5432; do sleep 1; done;
+      python3 manage.py migrate && python3 manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=1
+      - DJANGO_ALLOWED_HOSTS=localhost 127.0.0.1
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+  celery:
+    build: .
+    command: celery -A config worker --loglevel=INFO --pool=solo
+    volumes:
+      - .:/app
+    depends_on:
+      - auctionAPI
+      - redis
+  redis:
+    image: "redis:alpine"
+
+volumes:
+  postgres_volume:
